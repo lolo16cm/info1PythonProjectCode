@@ -1,136 +1,105 @@
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, roc_auc_score
 
-# Read the CSV file
+
+# Load the dataset
 df = pd.read_csv('cleanedData.csv')
 
-# Ignore gender_1, 'egoid' and 'datadate' features
-merged_df = df.drop(['gender_1','egoid', 'datadate'], axis=1)
+# Drop irrelevant features
+df = df.drop(['gender_1', 'egoid', 'datadate'], axis=1)
 
-# Set threshold to 0.9
-threshold = 0.9
+# Create the target variable: sleep_quality
+df['sleep_quality'] = np.where(df['Efficiency'] >= 0.9, 1, 0)
 
-# Binarize sleep quality based on 'Efficiency'
-# 1= good sleep, 0 is poor sleep
-merged_df['sleep_quality'] = np.where(merged_df['Efficiency'] >= threshold, 1, 0)
+# Select features and target
+X = df.drop(['Efficiency', 'sleep_quality'], axis=1)
+y = df['sleep_quality']
 
-# Select features (all except 'Efficiency' and 'sleep_quality') and target variable
-features = merged_df.columns.drop(['sleep_quality', 'Efficiency'])
-X = merged_df[features]
-y = merged_df['sleep_quality']
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-# Check for missing values
-print("Missing values in features:\n", X.isnull().sum())
+# Scale the features for neural network input
+#  ensures that all features have a mean of 0 and a standard deviation of 1, making them comparable in magnitude
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
+# Sequential allows to build the network layer by layer.
+# Define the neural network
+# An activation function introduces non-linearity into the model. Without it, the entire neural network  wouldn't be able to learn complex relationships in the data.
+model = Sequential([
+    Dense(64, activation='relu', input_shape=(X_train_scaled.shape[1],)),  # Input layer
+    Dropout(0.2),  # Dropout for regularization
+    Dense(32, activation='relu'),  # Hidden layer Adds another dense layer with 32 neurons, using the ReLU activation function.
+    Dropout(0.2),
+    Dense(1, activation='sigmoid')  # Output layer for binary classification
+])
 
+# Compile the model
+model.compile(optimizer='adam', #Adaptive Moment Estimation. Effective for a wide range of machine learning problems with minimal hyperparameter tuning.
+              loss='binary_crossentropy',  # Loss function for binary classification Works well when the output is a probability (between 0 and 1).
+              metrics=['accuracy'])
 
-X = merged_df[features]
-y = merged_df['sleep_quality']
-
-
-# Split data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
-)
-
-# Initialize the Random Forest Classifier
-rf_model = RandomForestClassifier(random_state=42)
 
 # Train the model
-rf_model.fit(X_train, y_train)
+history = model.fit(
+    X_train_scaled, y_train,
+    epochs=20,  # Number of epochs, An epoch represents one complete pass over the entire training dataset.,Training for 20 epochs means the model will see the entire dataset 20 times.
+    batch_size=32,  # Batch size,  Number of samples processed before the model updates its weights.
+    validation_split=0.2,  # Use 20% of training data for validation
+    verbose=1 #1: Displays a progress bar with metrics for each epoch (default).
+)
+
+
+# Evaluate the model on test data
+test_loss, test_accuracy = model.evaluate(X_test_scaled, y_test, verbose=0) #verbose =0 No output. returns two values:
+print(f"Test Accuracy: {test_accuracy:.2f}")
 
 # Make predictions
-y_pred = rf_model.predict(X_test)
-y_proba = rf_model.predict_proba(X_test)[:, 1]
+y_pred_proba = model.predict(X_test_scaled).flatten() #2d to 1d array using flatten()
+y_pred = (y_pred_proba > 0.5).astype(int)
 
-# Evaluate the model
+# Print classification report
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
 
-print("Confusion Matrix:")
-print(confusion_matrix(y_test, y_pred))
+# Compute ROC AUC score
+roc_auc = roc_auc_score(y_test, y_pred_proba)
+print(f"ROC AUC Score: {roc_auc:.2f}")
 
-print(f"ROC AUC Score: {roc_auc_score(y_test, y_proba):.2f}")
 
-# Get feature importances
-importances = rf_model.feature_importances_
+import matplotlib.pyplot as plt
 
-# Create a DataFrame for visualization
-feature_importance_df = pd.DataFrame({
-    'Feature': features,
-    'Importance': importances
-}).sort_values(by='Importance', ascending=False)
-
-# visualization the feature importance
-# Plot feature importances
-plt.figure(figsize=(10, 6))
-sns.barplot(
-    x='Importance', y='Feature', data=feature_importance_df, palette='coolwarm'
-)
-plt.title('RandomForestClassifier Feature Importance')
-plt.xlabel('Importance Score')
-plt.ylabel('Feature')
-plt.tight_layout()
+# Plot accuracy
+plt.figure(figsize=(10, 5))
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
 plt.show()
 
+# Plot loss
+plt.figure(figsize=(10, 5))
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
 
-
-
-
-
-# Default Interactive Prediction: Test data
-test_data_1 = {
-    'meanrate': 65.5,
-    'steps': 7500,
-    'sedentaryminutes': 300,
-    'lightlyactiveminutes': 120,
-    'fairlyactiveminutes': 45,
-    'veryactiveminutes': 30,
-    'lowrangecal': 1500,
-    'fatburncal': 400,
-    'cardiocal': 300,
-    'totalCalorie': 2500,
-    'bedtimedur': 8.0,
-    'minstofallasleep': 15,
-    'minsasleep': 450,
-    'minsawake': 30,
-}
-
-test_data_2 = {
-    'meanrate': 60,
-    'steps': 0,
-    'sedentaryminutes': 1440,
-    'lightlyactiveminutes': 0,
-    'fairlyactiveminutes': 0,
-    'veryactiveminutes': 0,
-    'lowrangecal': 1000,
-    'fatburncal': 0,
-    'cardiocal': 0,
-    'totalCalorie': 1000,
-    'bedtimedur': 5.0,
-    'minstofallasleep': 30,
-    'minsasleep': 300,
-    'minsawake': 60,
-}
-
-# Convert to DataFrame
-input_df_1 = pd.DataFrame([test_data_1])
-
-# Run prediction
-prediction_1 = rf_model.predict(input_df_1)
-print(f"Test Case 1 Prediction: {'Good' if prediction_1[0] == 1 else 'Poor'}")
-
+import numpy as np
 import pandas as pd
-
-# Iteractive Interactive Prediction
-#user can input the data into the prediction to get the prediction result
-
-# List of factors, declare heere for easy readable
+# meanrate =heartrate
+# List of factors
 factors = [
     'meanrate', 'steps', 'sedentaryminutes', 'lightlyactiveminutes',
     'fairlyactiveminutes', 'veryactiveminutes', 'lowrangecal', 'fatburncal',
@@ -156,15 +125,33 @@ for feature in factors:
 print("\nCollected Data:")
 print(user_input_data)
 
-# Optionally convert the dictionary to a DataFrame for prediction
+# Convert the dictionary to a DataFrame
 user_input_df = pd.DataFrame([user_input_data])
 
-# Assuming `rf_model` is a trained model, run the prediction
+# Scale the input data using the same scaler as in training
+scaler = StandardScaler()
+user_input_scaled = scaler.fit_transform(user_input_df)
+
+# Assuming `model` is the trained neural network model, make a prediction
 try:
-    prediction = rf_model.predict(user_input_df)
-    print(f"\nPredicted Sleep Quality: {'Good' if prediction[0] == 1 else 'Poor'}")
+    prediction_proba = model.predict(user_input_scaled).flatten()
+    prediction = (prediction_proba > 0.5).astype(int)
+    print(f"\nPredicted Sleep Quality: {'Your sleep quality is Good' if prediction[0] == 1 else 'Your sleep quality is  Poor'}")
 except Exception as e:
     print(f"Error during prediction: {e}")
 
-
-
+    '''Enter the values for your test case:
+Enter value for meanrate: 70
+Enter value for steps: 8500
+Enter value for sedentaryminutes: 200
+Enter value for lightlyactiveminutes: 100
+Enter value for fairlyactiveminutes: 50
+Enter value for veryactiveminutes: 20
+Enter value for lowrangecal: 1800
+Enter value for fatburncal: 300
+Enter value for cardiocal: 200
+Enter value for totalCalorie: 2300
+Enter value for bedtimedur: 7.5
+Enter value for minstofallasleep: 10
+Enter value for minsasleep: 420
+Enter value for minsawake: 15'''
