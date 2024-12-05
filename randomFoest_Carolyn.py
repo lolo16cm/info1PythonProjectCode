@@ -27,7 +27,7 @@ y = merged_df['sleep_quality']
 # Check for missing values
 print("Missing values in features:\n", X.isnull().sum())
 
-# Handle missing values: Drop rows with missing values
+
 
 X = merged_df[features]
 y = merged_df['sleep_quality']
@@ -83,7 +83,7 @@ plt.show()
 
 
 
-# Default Interactive Prediction
+# Default Interactive Prediction: Test data
 test_data_1 = {
     'meanrate': 65.5,
     'steps': 7500,
@@ -125,12 +125,12 @@ input_df_1 = pd.DataFrame([test_data_1])
 prediction_1 = rf_model.predict(input_df_1)
 print(f"Test Case 1 Prediction: {'Good' if prediction_1[0] == 1 else 'Poor'}")
 
-
 import pandas as pd
 
 # Iteractive Interactive Prediction
+#user can input the data into the prediction to get the prediction result
 
-# List of factors
+# List of factors, declare heere for easy readable
 factors = [
     'meanrate', 'steps', 'sedentaryminutes', 'lightlyactiveminutes',
     'fairlyactiveminutes', 'veryactiveminutes', 'lowrangecal', 'fatburncal',
@@ -165,3 +165,6 @@ try:
     print(f"\nPredicted Sleep Quality: {'Good' if prediction[0] == 1 else 'Poor'}")
 except Exception as e:
     print(f"Error during prediction: {e}")
+
+
+
